@@ -1,0 +1,53 @@
+# Maintainer: Reed Lawless <rwlawless1@gmail.com>
+pkgname=airpodsdesktop
+pkgver=0.3.2
+pkgrel=1
+pkgdesc='Displays your AirPods status (battery, connection, in-ear) in a native desktop popup'
+arch=('x86_64')
+url='https://github.com/Lawless-del/AirPodsDesktop'
+license=('GPL3')
+depends=(
+    qt5-base
+    qt5-svg
+    qt5-multimedia
+    qt5-wayland
+    boost-libs
+    dbus
+)
+makedepends=(
+    cmake
+    gcc
+    qt5-tools
+    nlohmann-json
+    boost
+)
+source=("$pkgname::git+$url.git#branch=linux")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname"
+    cmake -B build \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build build -j"$(nproc)"
+}
+
+package() {
+    cd "$pkgname"
+    install -Dm755 "build/Binary/$pkgname" \
+        "$pkgdir/usr/bin/$pkgname"
+    install -Dm644 "Source/Resource/Image/Icon.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.svg"
+
+    # Desktop file for XDG autostart / app launchers
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/$pkgname.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=AirPodsDesktop
+Comment=AirPods status monitor for Linux
+Exec=/usr/bin/$pkgname
+Icon=$pkgname
+Terminal=false
+Categories=Utility;
+EOF
+}
