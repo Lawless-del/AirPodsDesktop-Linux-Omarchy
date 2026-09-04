@@ -22,16 +22,26 @@
     #error "This file shouldn't be compiled."
 #endif
 
+#include <chrono>
+#include <memory>
+#include <vector>
+
+#include <QMetaObject>
+
 #include "Bluetooth_abstract.h"
 
 namespace Core::Bluetooth {
 
 using namespace std::chrono_literals;
 
+namespace Details {
+class DBusDeviceInfo;
+} // namespace Details
+
 class Device final : public Details::DeviceAbstract<uint64_t>
 {
 public:
-    // Device(WinrtBluetooth::BluetoothDevice device);
+    explicit Device(std::shared_ptr<Details::DBusDeviceInfo> info);
     Device(const Device &rhs);
     Device(Device &&rhs) noexcept;
     ~Device();
@@ -44,6 +54,13 @@ public:
     uint16_t GetVendorId() const override;
     uint16_t GetProductId() const override;
     DeviceState GetConnectionState() const override;
+
+private:
+    void Subscribe();
+    void Unsubscribe();
+
+    std::shared_ptr<Details::DBusDeviceInfo> _info;
+    std::vector<QMetaObject::Connection> _connections;
 };
 
 namespace DeviceManager {
@@ -57,12 +74,19 @@ class AdvertisementWatcher final
     : public Details::AdvertisementWatcherAbstract<AdvertisementWatcher>
 {
 public:
-    using Timestamp = uint8_t; // Unimplemented();
+    using Timestamp = std::chrono::steady_clock::time_point;
 
     explicit AdvertisementWatcher();
     ~AdvertisementWatcher();
 
     bool Start() override;
     bool Stop() override;
+
+private:
+    class Impl;
+
+    Impl *GetImpl();
+
+    std::unique_ptr<Impl> _impl;
 };
 } // namespace Core::Bluetooth
