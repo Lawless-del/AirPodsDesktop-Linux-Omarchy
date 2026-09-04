@@ -20,6 +20,8 @@
 
 #include <mutex>
 #include <QDir>
+#include <QFile>
+#include <QStandardPaths>
 #include <boost/pfr.hpp>
 #include <magic_enum.hpp>
 
@@ -64,7 +66,37 @@ void OnApply_auto_run(const Fields &newFields)
         regAutoRun.remove(Config::ProgramName);
     }
 #else
-    Unimplemented();
+    // XDG autostart
+    //
+    const QDir autostartDir{
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/autostart"};
+    const QString desktopFilePath = autostartDir.absoluteFilePath(CONFIG_PROGRAM_NAME ".desktop");
+
+    if (newFields.auto_run) {
+        if (!autostartDir.exists()) {
+            QDir{}.mkpath(autostartDir.absolutePath());
+        }
+
+        QFile desktopFile{desktopFilePath};
+        if (!desktopFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            LOG(Warn, "OnApply_auto_run: Open desktop file for writing failed. Path: '{}'",
+                desktopFilePath.toStdString());
+            return;
+        }
+
+        const QString content = QString{"[Desktop Entry]\n"
+                                        "Type=Application\n"
+                                        "Name=" CONFIG_PROGRAM_NAME "\n"
+                                        "Exec=\"%1\"\n"
+                                        "Terminal=false\n"
+                                        "X-GNOME-Autostart-enabled=true\n"}
+                                    .arg(ApdApplication::applicationFilePath());
+
+        desktopFile.write(content.toUtf8());
+    }
+    else {
+        QFile::remove(desktopFilePath);
+    }
 #endif
 }
 

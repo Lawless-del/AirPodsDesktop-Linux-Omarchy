@@ -24,8 +24,10 @@
 #include <functional>
 
 #include <QDir>
+#include <QUrl>
 #include <QTimer>
 #include <QWidget>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QBitmap>
 #include <QPainter>
@@ -182,7 +184,7 @@ inline bool OpenFileLocation(const QDir &directory)
 #if defined APD_OS_WIN
     return Core::OS::Windows::File::OpenFileLocation(directory);
 #else
-    Unimplemented();
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(directory.absolutePath()));
 #endif
 }
 } // namespace File

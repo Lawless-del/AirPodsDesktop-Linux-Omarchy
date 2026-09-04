@@ -55,9 +55,12 @@ bool Initialize(bool enableTrace)
 #endif
 
     try {
-        const auto logFilePath = GetLogFilePath().absolutePath().toStdWString();
-
 #if defined APD_OS_WIN
+        const auto logFilePath = GetLogFilePath().absolutePath().toStdWString();
+#else
+        const auto logFilePath = GetLogFilePath().absolutePath().toStdString();
+#endif
+
         // clang-format off
         auto logger = std::make_shared<spdlog::logger>(
             "Main", std::initializer_list<spdlog::sink_ptr>{
@@ -66,10 +69,6 @@ bool Initialize(bool enableTrace)
             }
         );
         // clang-format on
-#else
-        Unimplemented();
-        auto logger = std::make_shared<spdlog::logger>("Main");
-#endif
 
         spdlog::register_logger(logger);
         spdlog::set_default_logger(logger);

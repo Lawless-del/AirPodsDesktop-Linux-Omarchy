@@ -19,6 +19,7 @@
 #include "Opts.h"
 
 #include <numeric>
+#include <iostream>
 
 #include <QLocale>
 
@@ -77,7 +78,7 @@ const LaunchOpts &LaunchOptsManager::Parse(int argc, char *argv[])
 
         return _opts;
     }
-    catch (cxxopts::OptionException &exception) {
+    catch (const std::exception &exception) {
         FatalError(std::string{"Parse options failed.\n\n"} + exception.what(), false);
         std::exit(1);
     }

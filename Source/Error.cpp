@@ -18,6 +18,7 @@
 
 #include "Error.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 
@@ -93,7 +94,14 @@ void Initialize()
         MessageBoxA(nullptr, content.c_str(), title.c_str(), MB_ICONERROR | MB_OK);
     }
 #else
-    Unimplemented();
+    auto title = std::string{Config::ProgramName} + " fatal error";
+
+    std::fprintf(stderr, "%s\n\n%s\n", title.c_str(), content.c_str());
+    if (report) {
+        std::fprintf(
+            stderr, "\nPlease help us fix this problem by reporting it at:\n%s\n",
+            Config::UrlIssues);
+    }
 #endif
 
 #if defined APD_DEBUG
