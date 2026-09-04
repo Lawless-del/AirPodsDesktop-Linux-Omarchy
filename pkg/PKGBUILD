@@ -4,7 +4,7 @@ pkgver=0.3.2
 pkgrel=1
 pkgdesc='Displays your AirPods status (battery, connection, in-ear) in a native desktop popup'
 arch=('x86_64')
-url='https://github.com/Lawless-del/AirPodsDesktop'
+url='https://github.com/Lawless-del/AirPodsDesktop-Linux-Omarchy'
 license=('GPL3')
 depends=(
     qt5-base
@@ -34,7 +34,7 @@ build() {
 
 package() {
     cd "$pkgname"
-    install -Dm755 "build/Binary/$pkgname" \
+    install -Dm755 "build/Binary/AirPodsDesktop" \
         "$pkgdir/usr/bin/$pkgname"
     install -Dm644 "Source/Resource/Image/Icon.svg" \
         "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.svg"
