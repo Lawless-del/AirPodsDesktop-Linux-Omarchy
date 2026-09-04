@@ -52,10 +52,14 @@ Core::AirPods::Model AirPods::GetModel(uint16_t modelId)
         return Core::AirPods::Model::AirPods_Pro;
     case 0x2014: // AirPods Pro 2 (Lightning)
     case 0x2024: // AirPods Pro 2 (USB-C)
-        return Core::AirPods::Model::AirPods_Pro;
+        return Core::AirPods::Model::AirPods_Pro_2;
     case 0x2019: // AirPods 4
-    case 0x201B: // AirPods 4 (ANC)
         return Core::AirPods::Model::AirPods_4;
+    case 0x201B: // AirPods 4 (ANC)
+        return Core::AirPods::Model::AirPods_4_ANC;
+    case 0x200A: // AirPods Max
+    case 0x201F: // AirPods Max (USB-C)
+        return Core::AirPods::Model::AirPods_Max;
         // case 0x2003:
         //    return Core::AirPods::Model::Powerbeats_3;
         // case 0x2005:
@@ -89,13 +93,13 @@ Core::AirPods::Model AirPods::GetModel() const
 
 Core::AirPods::Battery AirPods::GetLeftBattery() const
 {
-    const auto val = (IsLeftBroadcasted() ? battery.curr : battery.anot);
+    const auto val = (IsCurrUsedForLeft() ? battery.curr : battery.anot);
     return (val >= 0 && val <= 10) ? val : Core::AirPods::Battery{};
 }
 
 Core::AirPods::Battery AirPods::GetRightBattery() const
 {
-    const auto val = (IsRightBroadcasted() ? battery.curr : battery.anot);
+    const auto val = (IsCurrUsedForLeft() ? battery.anot : battery.curr);
     return (val >= 0 && val <= 10) ? val : Core::AirPods::Battery{};
 }
 
@@ -107,12 +111,12 @@ Core::AirPods::Battery AirPods::GetCaseBattery() const
 
 bool AirPods::IsLeftCharging() const
 {
-    return (IsLeftBroadcasted() ? battery.currCharging : battery.anotCharging) != 0;
+    return (IsCurrUsedForLeft() ? battery.currCharging : battery.anotCharging) != 0;
 }
 
 bool AirPods::IsRightCharging() const
 {
-    return (IsRightBroadcasted() ? battery.currCharging : battery.anotCharging) != 0;
+    return (IsCurrUsedForLeft() ? battery.anotCharging : battery.currCharging) != 0;
 }
 
 bool AirPods::IsBothPodsInCase() const
@@ -144,7 +148,11 @@ bool AirPods::IsLeftInEar() const
     if (bothInCase || IsLeftCharging()) {
         return false;
     }
-    return IsLeftBroadcasted() ? currInEar : anotInEar;
+    // 'curr' normally belongs to the broadcasting pod and 'anot' to the other one;
+    // that assignment is reversed when the broadcasting pod sits in the case (the
+    // "flipped" bit). Gate both sides on the same test so they never disagree.
+    //
+    return IsCurrUsedForLeft() ? currInEar : anotInEar;
 }
 
 bool AirPods::IsRightInEar() const
@@ -152,7 +160,26 @@ bool AirPods::IsRightInEar() const
     if (bothInCase || IsRightCharging()) {
         return false;
     }
-    return IsRightBroadcasted() ? currInEar : anotInEar;
+    return IsCurrUsedForLeft() ? anotInEar : currInEar;
+}
+
+// 'curr' holds the values of the "current" pod and 'anot' of the "another" pod.
+// Normally the "current" pod is the one broadcasting, but when that pod is sitting
+// in the case (status bit 6, "flipped") the roles are reversed and 'curr' describes
+// the other (worn) pod. Left/right therefore must follow `broadcastFrom XOR flipped`,
+// otherwise the two pods swap values on screen every time the pod in the case takes
+// a turn at broadcasting (observed on AirPods 4 as a right pod flickering between
+// 30% and 40%). With the flip not set this reduces to the original mapping and is
+// unchanged for worn pods.
+//
+bool AirPods::IsCurrUsedForLeft() const
+{
+    return IsLeftBroadcasted() != IsFlipped();
+}
+
+bool AirPods::IsFlipped() const
+{
+    return unk7 != 0;
 }
 
 AirPods AirPods::Desensitize() const

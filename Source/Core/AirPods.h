@@ -66,6 +66,20 @@ struct State {
     QString displayName;
 
     bool operator==(const State &rhs) const = default;
+
+    // Whether this side of the advertisement carries any meaningful pod data.
+    // AirPods 4 firmware may stop filling in the legacy battery nibbles (0xF)
+    // while the in-ear/charging bits stay valid.
+    //
+    bool LeftHasInfo() const
+    {
+        return pods.left.battery.Available() || pods.left.isInEar || pods.left.isCharging;
+    }
+
+    bool RightHasInfo() const
+    {
+        return pods.right.battery.Available() || pods.right.isInEar || pods.right.isCharging;
+    }
 };
 
 //

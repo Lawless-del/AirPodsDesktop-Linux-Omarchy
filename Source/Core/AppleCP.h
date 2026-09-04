@@ -107,6 +107,13 @@ public:
     bool IsLeftBroadcasted() const;
     bool IsRightBroadcasted() const;
 
+    // True when this advertisement descends from a pod sitting in the case, in
+    // which case the "current"/"another" roles are reversed ("flipped"). See the
+    // decoder comments in AppleCP.cpp.
+    //
+    bool IsFlipped() const;
+    bool IsCurrUsedForLeft() const;
+
     Core::AirPods::Model GetModel() const;
 
     Core::AirPods::Battery GetLeftBattery() const;
@@ -135,7 +142,8 @@ private:
         uint8_t anotInEar : 1;
         uint8_t unk6 : 1;
         uint8_t broadcastFrom : 1; // This advertisement is broadcast from which earphone.
-        uint8_t unk7 : 1;
+        uint8_t unk7 : 1; // 1 = the broadcasting earphone is in the case and the
+                          // "current"/"another" speaker roles are flipped. See IsFlipped().
         uint8_t unk8 : 1;
     };
     struct {

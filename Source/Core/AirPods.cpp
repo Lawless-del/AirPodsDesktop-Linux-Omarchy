@@ -322,8 +322,13 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
     }()
 
     newState.model = PICK_SIDE(model != Model::Unknown).model;
-    newState.pods.left = std::move(PICK_SIDE(pods.left.battery.Available()).pods.left);
-    newState.pods.right = std::move(PICK_SIDE(pods.right.battery.Available()).pods.right);
+    // A pod side is "available" if it carries battery, in-ear, or charging
+    // information -- AirPods 4 firmware may stop filling in the legacy battery
+    // nibbles (0xF) while the in-ear bits stay valid, so gating only on battery
+    // would freeze the ear-detection state.
+    //
+    newState.pods.left = std::move(PICK_SIDE(LeftHasInfo()).pods.left);
+    newState.pods.right = std::move(PICK_SIDE(RightHasInfo()).pods.right);
     newState.caseBox = std::move(PICK_SIDE(caseBox.battery.Available()).caseBox);
 
 #undef PICK_SIDE

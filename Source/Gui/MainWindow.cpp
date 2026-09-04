@@ -431,8 +431,20 @@ void MainWindow::SetAnimation(std::optional<Core::AirPods::Model> model)
             // AirPods 4 have no dedicated animation yet, AirPods 3 are the closest design
             media = "qrc:/Resource/Video/AirPods_3.avi";
             break;
+        case Core::AirPods::Model::AirPods_4_ANC:
+            // Same as AirPods 4: no dedicated animation yet, closest design is AirPods 3
+            media = "qrc:/Resource/Video/AirPods_3.avi";
+            break;
+        case Core::AirPods::Model::AirPods_Pro_2:
+            // Same shape as AirPods Pro
+            media = "qrc:/Resource/Video/AirPods_Pro.avi";
+            break;
         case Core::AirPods::Model::AirPods_Pro:
             media = "qrc:/Resource/Video/AirPods_Pro.avi";
+            break;
+        case Core::AirPods::Model::AirPods_Max:
+            // No dedicated animation yet; fall back to the generic one
+            media = "qrc:/Resource/Video/AirPods_1.avi";
             break;
         case Core::AirPods::Model::Powerbeats_3:
         case Core::AirPods::Model::Beats_X:
