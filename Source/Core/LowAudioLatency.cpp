@@ -35,10 +35,8 @@ Controller::Controller(QObject *parent) : QObject{parent}
         }
     });
 
-    if (!Initialize()) {
-        // retry later
-        _initTimer.start(kRetryInterval);
-    }
+    // NOTE: `Initialize()` is called lazily on the first enable (see `Control()`), so that we
+    // don't require a working audio pipeline while the feature is turned off
 }
 
 bool Controller::Initialize()
@@ -78,6 +76,19 @@ void Controller::Control(bool enable)
 {
     LOG(Info, "LowAudioLatency::Controller Control: {}, _inited: {}", enable, _inited);
 
+    if (enable && !_inited) {
+        _enabled = enable;
+        if (!Initialize()) {
+            // retry later
+            _initTimer.start(kRetryInterval);
+        }
+        return;
+    }
+
+    if (!enable) {
+        _initTimer.stop();
+    }
+
     if (_inited) {
         if (enable) {
             _mediaPlayer->play();
@@ -96,7 +107,9 @@ void Controller::OnError(QMediaPlayer::Error error)
 
     _mediaPlayer->stop();
     _inited = false;
-    _initTimer.start(kRetryInterval);
+    if (_enabled) {
+        _initTimer.start(kRetryInterval);
+    }
 }
 
 } // namespace Core::LowAudioLatency

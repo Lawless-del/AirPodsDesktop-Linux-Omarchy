@@ -448,17 +448,26 @@ void Manager::OnBoundDeviceAddressChanged(uint64_t address)
         OnBoundDeviceConnectionStateChanged(std::forward<decltype(args)>(args)...);
     };
 
-    OnBoundDeviceConnectionStateChanged(_boundDevice->GetConnectionState());
+    OnBoundDeviceConnectionStateChanged(_boundDevice->GetConnectionState(), true);
 }
 
-void Manager::OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state)
+void Manager::OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, bool initial)
 {
     bool newDeviceConnected = state == Bluetooth::DeviceState::Connected;
     bool doDisconnect = _deviceConnected && !newDeviceConnected;
+    bool doConnect = !_deviceConnected && newDeviceConnected;
     _deviceConnected = newDeviceConnected;
 
     if (doDisconnect) {
         _stateMgr.Disconnect();
+    }
+
+    // Pop up the main window when the bound device connects
+    // (but not for the initial state query while binding, otherwise the window would
+    // pop up on every app launch with already connected AirPods)
+    //
+    if (doConnect && !initial) {
+        ApdApp->GetMainWindow()->ShowSafely();
     }
 
     LOG(Info, "The device we bound is updated. current: {}, new: {}", _deviceConnected,

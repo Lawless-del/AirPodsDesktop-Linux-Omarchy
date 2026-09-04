@@ -164,7 +164,7 @@ private:
     bool _deviceConnected{false};
     bool _automaticEarDetection{false};
 
-    void OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state);
+    void OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, bool initial = false);
     void OnStateChanged(Details::StateManager::UpdateEvent updateEvent);
     void OnLidOpened(bool opened);
     void OnBothInEar(bool isBothInEar);
