@@ -50,6 +50,12 @@ Core::AirPods::Model AirPods::GetModel(uint16_t modelId)
         return Core::AirPods::Model::AirPods_3;
     case 0x200E:
         return Core::AirPods::Model::AirPods_Pro;
+    case 0x2014: // AirPods Pro 2 (Lightning)
+    case 0x2024: // AirPods Pro 2 (USB-C)
+        return Core::AirPods::Model::AirPods_Pro;
+    case 0x2019: // AirPods 4
+    case 0x201B: // AirPods 4 (ANC)
+        return Core::AirPods::Model::AirPods_4;
         // case 0x2003:
         //    return Core::AirPods::Model::Powerbeats_3;
         // case 0x2005:

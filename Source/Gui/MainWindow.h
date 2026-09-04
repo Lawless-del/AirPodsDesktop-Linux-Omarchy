@@ -24,6 +24,7 @@
 
 #include <QVideoWidget>
 #include <QMediaPlayer>
+#include <QMediaPlaylist>
 #include <QPropertyAnimation>
 
 #include "../Utils.h"
@@ -86,6 +87,7 @@ private:
     QPropertyAnimation _posAnimation{this, "pos"};
     VideoWidget *_videoWidget;
     QMediaPlayer *_mediaPlayer = new QMediaPlayer{this};
+    QMediaPlaylist *_mediaPlaylist = new QMediaPlaylist{this};
     QTimer *_autoHideTimer = new QTimer{this};
     CloseButton *_closeButton;
     Widget::Battery *_leftBattery = new Widget::Battery{this};

@@ -411,6 +411,8 @@ void MainWindow::SetAnimation(std::optional<Core::AirPods::Model> model)
 
     if (!model.has_value()) {
         StopAnimation();
+        _mediaPlayer->setPlaylist(nullptr);
+        _mediaPlaylist->clear();
         _mediaPlayer->setMedia(QMediaContent{});
     }
     else {
@@ -425,6 +427,10 @@ void MainWindow::SetAnimation(std::optional<Core::AirPods::Model> model)
         case Core::AirPods::Model::AirPods_3:
             media = "qrc:/Resource/Video/AirPods_3.avi";
             break;
+        case Core::AirPods::Model::AirPods_4:
+            // AirPods 4 have no dedicated animation yet, AirPods 3 are the closest design
+            media = "qrc:/Resource/Video/AirPods_3.avi";
+            break;
         case Core::AirPods::Model::AirPods_Pro:
             media = "qrc:/Resource/Video/AirPods_Pro.avi";
             break;
@@ -436,7 +442,13 @@ void MainWindow::SetAnimation(std::optional<Core::AirPods::Model> model)
             break;
         }
 
-        _mediaPlayer->setMedia(QUrl{media});
+        // Use a looping playlist rather than a restart-on-stop, because replaying a `qrc:/`
+        // media doesn't work reliably on some backends (e.g. GStreamer)
+        //
+        _mediaPlaylist->clear();
+        _mediaPlaylist->addMedia(QUrl{media});
+        _mediaPlaylist->setPlaybackMode(QMediaPlaylist::CurrentItemInLoop);
+        _mediaPlayer->setPlaylist(_mediaPlaylist);
         PlayAnimation();
     }
 
