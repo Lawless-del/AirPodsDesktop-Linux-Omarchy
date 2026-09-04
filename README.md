@@ -1,3 +1,15 @@
+To push to Omarchy or Arch run:
+
+git clone https://github.com/Lawless-del/AirPodsDesktop-Linux-Omarchy.git -b linux
+cd AirPodsDesktop-Linux-Omarchy/pkg
+makepkg -si
+
+
+
+
+
+
+
 <h1 align="center">
     <a href="https://github.com/SpriteOvO/AirPodsDesktop"><img src="/Source/Resource/Image/Icon.svg" alt="Icon" width="128"></a>
     <br>
