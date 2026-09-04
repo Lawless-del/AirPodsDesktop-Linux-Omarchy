@@ -124,6 +124,9 @@ endif()
 # Qt
 #
 set(APD_QT_COMPONENTS Core Gui Widgets Svg Multimedia MultimediaWidgets)
+if (NOT WIN32)
+    set(APD_QT_COMPONENTS ${APD_QT_COMPONENTS} DBus)
+endif()
 foreach (QT_COMPONENT ${APD_QT_COMPONENTS})
     set(APD_QT_LIBRARIES ${APD_QT_LIBRARIES} Qt5::${QT_COMPONENT})
 endforeach()
@@ -161,34 +164,39 @@ if (cxxopts_FOUND)
     message("Found 'cxxopts' (${cxxopts_VERSION}).")
 else()
     message("Fetching 'cxxopts'...")
+    set(CXXOPTS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(CXXOPTS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
         cxxopts
         GIT_REPOSITORY "https://github.com/jarro2783/cxxopts.git"
-        GIT_TAG "302302b30839505703d37fb82f536c53cf9172fa" # v2.2.1
+        GIT_TAG "44380e5a44706ab7347f400698c703eb2a196202" # v3.2.1
     )
     FetchContent_MakeAvailable(cxxopts)
     message("Fetch 'cxxopts' done.")
-
-    add_library(cxxopts::cxxopts ALIAS cxxopts)
 endif()
 
 # cpr
 #
-find_package(cpr 1.7.2 CONFIG)
-if (cpr_FOUND)
-    message("Found 'cpr' (${cpr_VERSION}).")
-else()
-    set(CPR_BUILD_TESTS ${APD_BUILD_TESTS})
-    set(CPR_BUILD_TESTS_SSL OFF)
-    set(CURL_ZLIB OFF CACHE STRING "" FORCE)
-    message("Fetching 'cpr'...")
-    FetchContent_Declare(
-        cpr
-        GIT_REPOSITORY "https://github.com/whoshuu/cpr.git"
-        GIT_TAG "beb9e98806bb84bcc130a2cebfbcbbc6ce62b335" # v1.7.2
-    )
-    FetchContent_MakeAvailable(cpr)
-    message("Fetch 'cpr' done.")
+# Only required by the updater (Update.cpp), which is Windows only for now
+#
+if (WIN32)
+    find_package(cpr 1.7.2 CONFIG)
+    if (cpr_FOUND)
+        message("Found 'cpr' (${cpr_VERSION}).")
+    else()
+        set(CPR_BUILD_TESTS ${APD_BUILD_TESTS})
+        set(CPR_BUILD_TESTS_SSL OFF)
+        set(CURL_ZLIB OFF CACHE STRING "" FORCE)
+        message("Fetching 'cpr'...")
+        FetchContent_Declare(
+            cpr
+            GIT_REPOSITORY "https://github.com/whoshuu/cpr.git"
+            GIT_TAG "beb9e98806bb84bcc130a2cebfbcbbc6ce62b335" # v1.7.2
+        )
+        FetchContent_MakeAvailable(cpr)
+        message("Fetch 'cpr' done.")
+    endif()
+    set(APD_CPR_LIBRARY cpr::cpr)
 endif()
 
 # json
@@ -198,6 +206,7 @@ if (nlohmann_json_FOUND)
     message("Found 'nlohmann_json' (${nlohmann_json_VERSION}).")
 else()
     message("Fetching 'nlohmann_json'...")
+    set(JSON_BuildTests OFF CACHE INTERNAL "")
     FetchContent_Declare(
         nlohmann_json
         GIT_REPOSITORY "https://github.com/nlohmann/json.git"
@@ -506,7 +515,7 @@ target_link_libraries(
     ${APD_QT_LIBRARIES}
     spdlog::spdlog
     cxxopts::cxxopts
-    cpr::cpr
+    ${APD_CPR_LIBRARY}
     nlohmann_json::nlohmann_json
     SingleApplication::SingleApplication
     magic_enum::magic_enum
