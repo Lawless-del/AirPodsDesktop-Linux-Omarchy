@@ -21,6 +21,9 @@
 #include <QFont>
 #include <QPainter>
 #include <QSvgRenderer>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusReply>
 
 #include <Config.h>
 #include "../Application.h"
@@ -36,8 +39,6 @@ TrayIcon::TrayIcon()
     connect(_actionSettings, &QAction::triggered, this, &TrayIcon::OnSettingsClicked);
     connect(_actionAbout, &QAction::triggered, this, &TrayIcon::OnAboutClicked);
     connect(_actionQuit, &QAction::triggered, qApp, &QApplication::quit, Qt::QueuedConnection);
-    connect(_tray, &QSystemTrayIcon::activated, this, &TrayIcon::OnIconClicked);
-    connect(_tray, &QSystemTrayIcon::messageClicked, this, [this]() { ShowMainWindow(); });
 
     connect(
         this, &TrayIcon::OnTrayIconBatteryChangedSafely, this, &TrayIcon::OnTrayIconBatteryChanged);
@@ -51,9 +52,63 @@ TrayIcon::TrayIcon()
     _menu->addAction(_actionAbout);
     _menu->addAction(_actionQuit);
 
+    // Create the tray icon as soon as a tray host is available. On Wayland the
+    // icon is a StatusNotifier item and requires the desktop shell's
+    // StatusNotifierWatcher, which may register shortly after our autostart
+    // service starts (the shell and the autostart apps race on the same
+    // graphical-session target). Qt probes tray availability when the icon is
+    // first created and caches the result, so creating the icon before the host
+    // exists would leave us invisible for the whole session. Retry every two
+    // seconds until the host shows up.
+    //
+    _trayCreateTimer.setInterval(2000);
+    connect(&_trayCreateTimer, &QTimer::timeout, this, &TrayIcon::TryCreateTray);
+
+    TryCreateTray();
+    if (_tray == nullptr) {
+        _trayCreateTimer.start();
+    }
+}
+
+void TrayIcon::TryCreateTray()
+{
+    if (_tray != nullptr) {
+        return;
+    }
+
+    // On Linux the tray icon is a StatusNotifier item, which requires a tray
+    // host (`org.kde.StatusNotifierWatcher`) on the session bus. Keep waiting
+    // until one is actually registered instead of giving up at startup.
+    //
+#if defined APD_OS_LINUX
+    const QDBusReply<bool> statusNotifierRegistered =
+        QDBusConnection::sessionBus().interface()->isServiceRegistered(
+            QStringLiteral("org.kde.StatusNotifierWatcher"));
+
+    if (!statusNotifierRegistered.isValid() || !statusNotifierRegistered.value()) {
+        return;
+    }
+#endif
+
+    CreateTray();
+}
+
+void TrayIcon::CreateTray()
+{
+    APD_ASSERT(_tray == nullptr);
+
+    _tray = new QSystemTrayIcon{this};
+
+    connect(_tray, &QSystemTrayIcon::activated, this, &TrayIcon::OnIconClicked);
+    connect(_tray, &QSystemTrayIcon::messageClicked, this, [this]() { ShowMainWindow(); });
+
     _tray->setContextMenu(_menu);
     _tray->setIcon(ApdApplication::windowIcon());
     _tray->show();
+
+    LOG(Info, "System tray icon shown.");
+
+    Repaint();
 }
 
 void TrayIcon::UpdateState(const Core::AirPods::State &state)
@@ -100,6 +155,10 @@ void TrayIcon::ShowMainWindow()
 
 void TrayIcon::Repaint()
 {
+    if (_tray == nullptr) {
+        return;
+    }
+
     QString toolTipContent;
     Core::AirPods::Battery minBattery;
 

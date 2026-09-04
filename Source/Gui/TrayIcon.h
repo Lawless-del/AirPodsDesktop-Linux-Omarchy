@@ -19,6 +19,7 @@
 #pragma once
 
 #include <QSystemTrayIcon>
+#include <QTimer>
 #include <QMenu>
 #include <QAction>
 
@@ -39,7 +40,9 @@ public:
     template <class... ArgsT>
     inline void ShowMessage(ArgsT &&...args)
     {
-        _tray->showMessage(std::forward<ArgsT>(args)...);
+        if (_tray != nullptr) {
+            _tray->showMessage(std::forward<ArgsT>(args)...);
+        }
     }
 
     inline QMenu *GetContextMenu()
@@ -49,7 +52,7 @@ public:
 
     inline QString GetToolTip()
     {
-        return _tray->toolTip();
+        return _tray != nullptr ? _tray->toolTip() : QString{};
     }
 
     void UpdateState(const Core::AirPods::State &state);
@@ -64,12 +67,18 @@ Q_SIGNALS:
     void OnTrayIconBatteryChangedSafely(Core::Settings::TrayIconBatteryBehavior value);
 
 private:
-    QSystemTrayIcon *_tray = new QSystemTrayIcon{this};
+    // Created lazily by TryCreateTray() once a tray host is available, so that
+    // Qt does not permanently decide "no system tray" at application start when
+    // the desktop shell (and its StatusNotifierWatcher) registers a moment
+    // later than our autostart service. See TryCreateTray().
+    //
+    QSystemTrayIcon *_tray = nullptr;
     QMenu *_menu = new QMenu{this};
     QAction *_actionNewVersion = new QAction{tr("New version available!"), this};
     QAction *_actionSettings = new QAction{tr("Settings"), this};
     QAction *_actionAbout = new QAction{tr("About"), this};
     QAction *_actionQuit = new QAction{tr("Quit"), this};
+    QTimer _trayCreateTimer;
     Core::Settings::TrayIconBatteryBehavior _trayIconBatteryBehavior{
         Core::Settings::TrayIconBatteryBehavior::Disable};
     Status _status{Status::Unavailable};
@@ -81,6 +90,8 @@ private:
 
     void ShowMainWindow();
     void Repaint();
+    void TryCreateTray();
+    void CreateTray();
 
     static std::optional<QImage>
     GenerateIcon(int size, const std::optional<QString> &optText, const std::optional<QColor> &dot);
