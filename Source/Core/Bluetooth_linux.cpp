@@ -665,9 +665,53 @@ private:
         return MacAddressToUint64(reply.value().toString());
     }
 
+    static QByteArray ExtractManufacturerDataBytes(const QVariant &value)
+    {
+        // BlueZ exposes the value of each map entry as "ay". Depending on how Qt
+        // demarshals the signal it can arrive as a QByteArray, a byte list, or a
+        // boxed QDBusArgument. Accept all three so the data is never dropped.
+        //
+        if (value.type() == QVariant::ByteArray || value.canConvert<QByteArray>()) {
+            return value.toByteArray();
+        }
+
+        if (value.type() == QVariant::List) {
+            QByteArray bytes;
+            bytes.reserve(value.toList().size());
+            for (const auto &item : value.toList()) {
+                bytes.append(static_cast<char>(item.toUInt() & 0xFF));
+            }
+            return bytes;
+        }
+
+        if (value.canConvert<QDBusArgument>()) {
+            const QDBusArgument argument = value.value<QDBusArgument>();
+            if (argument.currentType() == QDBusArgument::ArrayType) {
+                QByteArray bytes;
+                argument >> bytes;
+                return bytes;
+            }
+        }
+
+        return {};
+    }
+
     static QMap<quint16, QByteArray> ParseManufacturerData(const QVariant &variant)
     {
         QMap<quint16, QByteArray> result;
+
+        if (variant.type() == QVariant::Map) {
+            const auto map = variant.toMap();
+            for (auto iter = map.cbegin(); iter != map.cend(); ++iter) {
+                bool ok = false;
+                const quint16 companyId = iter.key().toUShort(&ok, 16);
+                if (!ok) {
+                    continue;
+                }
+                result.insert(companyId, ExtractManufacturerDataBytes(iter.value()));
+            }
+            return result;
+        }
 
         const auto argument = variant.value<QDBusArgument>();
         if (argument.currentType() != QDBusArgument::MapType) {
@@ -683,7 +727,7 @@ private:
             argument >> companyId >> data;
             argument.endMapEntry();
 
-            result.insert(companyId, data.toByteArray());
+            result.insert(companyId, ExtractManufacturerDataBytes(data));
         }
         argument.endMap();
 

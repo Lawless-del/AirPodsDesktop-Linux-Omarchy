@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 
 #include "Bluetooth.h"
@@ -121,6 +122,11 @@ public:
 
     void OnRssiMinChanged(int16_t rssiMin);
 
+    // Called (while the internal mutex is held) when the last known state is
+    // discarded because the device is lost, disconnects, or stops broadcasting.
+    //
+    void SetOnStateLost(std::function<void()> callback);
+
 private:
     using Clock = std::chrono::steady_clock;
     using Timestamp = std::chrono::time_point<Clock>;
@@ -137,9 +143,10 @@ private:
     void UpdateAdv(Advertisement adv);
     std::optional<UpdateEvent> UpdateState();
     void ResetAll();
-
     void DoLost();
     void DoStateReset(Side side);
+
+    std::function<void()> _onStateLost;
 };
 } // namespace Details
 
@@ -163,6 +170,11 @@ private:
     QString _deviceName;
     bool _deviceConnected{false};
     bool _automaticEarDetection{false};
+
+    // Mirrors `_automaticEarDetection` for the (lock-free) state-loss path.
+    std::atomic<bool> _autoEarDetectionAtomic{false};
+    // -1: unknown (no advertisement processed yet), 0: not both in ear, 1: both in ear.
+    std::atomic<int> _lastBothInEar{-1};
 
     void OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, bool initial = false);
     void OnStateChanged(Details::StateManager::UpdateEvent updateEvent);

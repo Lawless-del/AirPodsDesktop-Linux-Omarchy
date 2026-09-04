@@ -134,14 +134,25 @@ bool AirPods::IsCaseCharging() const
 bool AirPods::IsLeftInEar() const
 {
     // If it's charging, the "ear" will be set in one of the multiple devices, idk why..
-    // so we need to filter it
-    //     vvvvvvvvvvvvvvvvvvvv
-    return !IsLeftCharging() && (IsLeftBroadcasted() ? currInEar : anotInEar);
+    // so we need to filter it.
+    //
+    // The in-ear bits are also not reliable when both pods are in the case: they
+    // can read as "in ear" even with the case shut, which would break automatic
+    // ear detection (media is never paused/resumed because the state never
+    // appears to change).
+    //
+    if (bothInCase || IsLeftCharging()) {
+        return false;
+    }
+    return IsLeftBroadcasted() ? currInEar : anotInEar;
 }
 
 bool AirPods::IsRightInEar() const
 {
-    return !IsRightCharging() && (IsRightBroadcasted() ? currInEar : anotInEar);
+    if (bothInCase || IsRightCharging()) {
+        return false;
+    }
+    return IsRightBroadcasted() ? currInEar : anotInEar;
 }
 
 AirPods AirPods::Desensitize() const

@@ -189,6 +189,12 @@ void StateManager::OnRssiMinChanged(int16_t rssiMin)
     _rssiMin = rssiMin;
 }
 
+void StateManager::SetOnStateLost(std::function<void()> callback)
+{
+    std::lock_guard<std::mutex> lock{_mutex};
+    _onStateLost = std::move(callback);
+}
+
 bool StateManager::IsPossibleDesiredAdv(const Advertisement &adv) const
 {
     const auto advRssi = adv.GetRssi();
@@ -335,6 +341,9 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
 void StateManager::ResetAll()
 {
     if (_cachedState.has_value()) {
+        if (_onStateLost) {
+            _onStateLost();
+        }
         ApdApp->GetMainWindow()->DisconnectSafely();
     }
 
@@ -367,6 +376,17 @@ void StateManager::DoStateReset(Side side)
 
 Manager::Manager()
 {
+    // If the device stops broadcasting (e.g. the pods are put back into the
+    // case) before we get an advertisement showing them out of ear, media
+    // would keep playing forever. Pause it whenever known state is lost.
+    //
+    _stateMgr.SetOnStateLost([this] {
+        if (_autoEarDetectionAtomic.load(std::memory_order_relaxed) &&
+            _lastBothInEar.exchange(0, std::memory_order_relaxed) == 1) {
+            Core::GlobalMedia::Pause();
+        }
+    });
+
     _adWatcher.CbReceived() += [this](auto &&...args) {
         std::lock_guard<std::mutex> lock{_mutex};
         OnAdvertisementReceived(std::forward<decltype(args)>(args)...);
@@ -408,6 +428,7 @@ void Manager::OnAutomaticEarDetectionChanged(bool enable)
 {
     std::lock_guard<std::mutex> lock{_mutex};
     _automaticEarDetection = enable;
+    _autoEarDetectionAtomic.store(enable, std::memory_order_relaxed);
 }
 
 void Manager::OnBoundDeviceAddressChanged(uint64_t address)
@@ -500,12 +521,14 @@ void Manager::OnStateChanged(Details::StateManager::UpdateEvent updateEvent)
 
     // Both in ear
     //
-    if (oldState.has_value()) {
-        bool oldBothInEar = oldState->pods.left.isInEar && oldState->pods.right.isInEar;
-        bool newBothInEar = newState.pods.left.isInEar && newState.pods.right.isInEar;
-        if (oldBothInEar != newBothInEar) {
-            OnBothInEar(newBothInEar);
-        }
+    // Track the last known state across resets, so that a lost broadcast
+    // (pods put back in the case) is treated as "out of ear" and media is
+    // paused, and so that re-inserting them later resumes it.
+    //
+    const bool newBothInEar = newState.pods.left.isInEar && newState.pods.right.isInEar;
+    const int oldBothInEar = _lastBothInEar.exchange(newBothInEar ? 1 : 0, std::memory_order_relaxed);
+    if (oldBothInEar != -1 && (oldBothInEar != 0) != newBothInEar) {
+        OnBothInEar(newBothInEar);
     }
 }
 
