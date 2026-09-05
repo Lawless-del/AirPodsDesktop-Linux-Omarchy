@@ -139,6 +139,13 @@ public:
     bool GetCurrInEar() const { return currInEar != 0; }
     bool GetAnotInEar() const { return anotInEar != 0; }
 
+    // Raw per-advertisement charging bits: currCharging = broadcasting pod,
+    // anotCharging = other pod. Firmware often mirrors the case state in anotCharging,
+    // so only trust currCharging from the active broadcaster.
+    //
+    bool GetCurrCharging() const { return battery.currCharging != 0; }
+    bool GetAnotCharging() const { return battery.anotCharging != 0; }
+
     AirPods Desensitize() const;
 
 private:

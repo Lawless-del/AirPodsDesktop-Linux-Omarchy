@@ -76,6 +76,9 @@ Advertisement::Advertisement(const Bluetooth::AdvertisementWatcher::ReceivedData
     _state.rawCurrInEar = _protocol.GetCurrInEar();
     _state.rawAnotInEar = _protocol.GetAnotInEar();
 
+    _state.rawCurrCharging = _protocol.GetCurrCharging();
+    _state.rawAnotCharging = _protocol.GetAnotCharging();
+
     _state.pods.left.battery = _protocol.GetLeftBattery();
     _state.pods.left.isCharging = _protocol.IsLeftCharging();
     _state.pods.left.isInEar = _protocol.IsLeftInEar();
@@ -353,37 +356,42 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
         return now - slot.second < kPodTransmittingLimit;
     };
 
-    newState.pods.left.isInEar = [&]() {
-        bool charging = newState.pods.left.isCharging;
-        if (charging) {
-            return false;
+    // Resolve per-pod charging from raw advertisement bits.
+    // Only trust the broadcasting pod's own currCharging; anotCharging is unreliable
+    // (firmware mirrors case state in the "another" slot).
+    auto resolveCharging = [&](const std::pair<Advertisement::AdvState, Timestamp> &selfSlot,
+                               const std::pair<Advertisement::AdvState, Timestamp> &otherSlot) {
+        if (isTransmitting(selfSlot)) {
+            return selfSlot.first.rawCurrCharging;
         }
-        // Fallback: if both pods are charging, they're likely both in the case
-        // (even if fully charged and not actively charging, the firmware may report
-        // bothInCase). Only gate the side we're evaluating if the OTHER side is
-        // also charging, to avoid incorrectly pausing when only one pod is cased.
-        bool bothCharging = newState.pods.left.isCharging && newState.pods.right.isCharging;
-        if (bothCharging && newState.caseBox.isBothPodsInCase) {
+        // Pod not broadcasting -> don't trust other's anotCharging (firmware lies).
+        // Treat as not charging; the in-ear gate below will handle "in case" via
+        // the pod's own sensor when it was last broadcasting.
+        return false;
+    };
+
+    newState.pods.left.isCharging = resolveCharging(cachedAdvState.left, cachedAdvState.right);
+    newState.pods.right.isCharging = resolveCharging(cachedAdvState.right, cachedAdvState.left);
+
+    // In-ear resolution: gate by resolved charging (pod in case = charging = out of ear).
+    // No bothInCase fallback needed -- fully charged in closed case yields no ads,
+    // which triggers state loss -> pause anyway.
+    //
+    newState.pods.left.isInEar = [&]() {
+        if (newState.pods.left.isCharging) {
             return false;
         }
         if (isTransmitting(cachedAdvState.left)) {
-            // The left pod is broadcasting: trust its own sensor.
             return cachedAdvState.left.first.rawCurrInEar;
         }
         if (isTransmitting(cachedAdvState.right)) {
-            // The left pod went quiet: trust the right pod's report about it.
             return cachedAdvState.right.first.rawAnotInEar;
         }
         return false;
     }();
 
     newState.pods.right.isInEar = [&]() {
-        bool charging = newState.pods.right.isCharging;
-        if (charging) {
-            return false;
-        }
-        bool bothCharging = newState.pods.left.isCharging && newState.pods.right.isCharging;
-        if (bothCharging && newState.caseBox.isBothPodsInCase) {
+        if (newState.pods.right.isCharging) {
             return false;
         }
         if (isTransmitting(cachedAdvState.right)) {

@@ -104,6 +104,14 @@ public:
         //
         bool rawCurrInEar{false};
         bool rawAnotInEar{false};
+
+        // Raw per-advertisement charging bits: the broadcasting pod's own
+        // charging status ("current") and the other pod's ("another").
+        // Firmware often sets anotCharging when the other pod is in the case,
+        // so only trust currCharging from the actively broadcasting pod.
+        //
+        bool rawCurrCharging{false};
+        bool rawAnotCharging{false};
     };
 
     static bool IsDesiredAdv(const Bluetooth::AdvertisementWatcher::ReceivedData &data);
