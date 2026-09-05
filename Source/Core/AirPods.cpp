@@ -23,6 +23,7 @@
 #include <thread>
 #include <QVector>
 #include <QMetaObject>
+#include <QTimer>
 
 #include "Bluetooth.h"
 #include "GlobalMedia.h"
@@ -71,6 +72,9 @@ Advertisement::Advertisement(const Bluetooth::AdvertisementWatcher::ReceivedData
 
     _state.model = _protocol.GetModel();
     _state.side = _protocol.GetBroadcastedSide();
+
+    _state.rawCurrInEar = _protocol.GetCurrInEar();
+    _state.rawAnotInEar = _protocol.GetAnotInEar();
 
     _state.pods.left.battery = _protocol.GetLeftBattery();
     _state.pods.left.isCharging = _protocol.IsLeftCharging();
@@ -331,6 +335,56 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
     newState.pods.right = std::move(PICK_SIDE(RightHasInfo()).pods.right);
     newState.caseBox = std::move(PICK_SIDE(caseBox.battery.Available()).caseBox);
 
+    // In-ear resolution.
+    //
+    // The two pods take turns broadcasting. Each advertisement's own sensor bit
+    // ("current") is authoritative for the broadcasting pod, but its report about
+    // the other pod ("another") is only trustworthy once that pod has STOPPED
+    // broadcasting -- while both transmit (transition moments) they can claim the
+    // other one is out of the ear, and a pod that just dropped out can lag.
+    // Reconstruct each side from the freshest advertisement on the principle:
+    //   * pod still broadcasting -> trust its own sensor bit;
+    //   * pod stopped broadcasting -> trust the surviving pod's report.
+    //
+    const auto &now = Clock::now();
+    constexpr auto kPodTransmittingLimit = 3s;
+
+    auto isTransmitting = [&](const std::pair<Advertisement::AdvState, Timestamp> &slot) {
+        return now - slot.second < kPodTransmittingLimit;
+    };
+
+    newState.pods.left.isInEar = [&]() {
+        bool charging = newState.pods.left.isCharging;
+        bool inCase = newState.caseBox.isBothPodsInCase || false;
+        if (charging || inCase) {
+            return false;
+        }
+        if (isTransmitting(cachedAdvState.left)) {
+            // The left pod is broadcasting: trust its own sensor.
+            return cachedAdvState.left.first.rawCurrInEar;
+        }
+        if (isTransmitting(cachedAdvState.right)) {
+            // The left pod went quiet: trust the right pod's report about it.
+            return cachedAdvState.right.first.rawAnotInEar;
+        }
+        return false;
+    }();
+
+    newState.pods.right.isInEar = [&]() {
+        bool charging = newState.pods.right.isCharging;
+        bool inCase = newState.caseBox.isBothPodsInCase || false;
+        if (charging || inCase) {
+            return false;
+        }
+        if (isTransmitting(cachedAdvState.right)) {
+            return cachedAdvState.right.first.rawCurrInEar;
+        }
+        if (isTransmitting(cachedAdvState.left)) {
+            return cachedAdvState.left.first.rawAnotInEar;
+        }
+        return false;
+    }();
+
 #undef PICK_SIDE
 
     if (newState == _cachedState) {
@@ -530,11 +584,58 @@ void Manager::OnStateChanged(Details::StateManager::UpdateEvent updateEvent)
     // (pods put back in the case) is treated as "out of ear" and media is
     // paused, and so that re-inserting them later resumes it.
     //
+    // The two pods take turns broadcasting and can briefly disagree about the
+    // in-ear bits while one is moved in or out. A change is only acted on once
+    // the new value has held stable for a moment, so the alternating
+    // advertisements do not fire pause/resume back and forth. `_lastBothInEar`
+    // keeps the previous value during the debounce window; the state-loss path
+    // in Manager() can still pause immediately.
+    //
+    // UpdateState only emits when the decoded state CHANGES, so once the new
+    // value holds steady no further OnStateChanged calls arrive. Scheduling a
+    // single QTimer when the edge is first seen lets the deadline be evaluated
+    // against the current state even without new state-change events.
+    //
     const bool newBothInEar = newState.pods.left.isInEar && newState.pods.right.isInEar;
-    const int oldBothInEar = _lastBothInEar.exchange(newBothInEar ? 1 : 0, std::memory_order_relaxed);
-    if (oldBothInEar != -1 && (oldBothInEar != 0) != newBothInEar) {
-        OnBothInEar(newBothInEar);
+    const int oldBothInEar = _lastBothInEar.load(std::memory_order_relaxed);
+    if (oldBothInEar == -1 || (oldBothInEar != 0) == newBothInEar) {
+        _bothInEarDebounceActive.store(false, std::memory_order_relaxed);
+        _lastBothInEar.store(newBothInEar ? 1 : 0, std::memory_order_relaxed);
     }
+    else if (!_bothInEarDebounceActive.exchange(true, std::memory_order_relaxed)) {
+        LOG(Info,
+            "automatic_ear_detection: edge detected -> {} leftInEar={} rightInEar={} bothCase={} (awaiting debounce)",
+            newBothInEar ? "both-in" : "not-both-in", newState.pods.left.isInEar,
+            newState.pods.right.isInEar, newState.caseBox.isBothPodsInCase);
+        QTimer::singleShot(
+            static_cast<int>(Manager::BothInEarDebounce.count()),
+            [this] { OnBothInEarDebounced(); });
+    }
+}
+
+void Manager::OnBothInEarDebounced()
+{
+    // Reaches the deadline while the adv thread continues to update state, so
+    // re-read the CURRENT decoded state instead of relying on a stale event.
+    _bothInEarDebounceActive.store(false, std::memory_order_relaxed);
+
+    const auto optState = _stateMgr.GetCurrentState();
+    if (!optState.has_value()) {
+        return;
+    }
+    const auto &newState = *optState;
+    const bool newBothInEar = newState.pods.left.isInEar && newState.pods.right.isInEar;
+    const int oldBothInEar = _lastBothInEar.load(std::memory_order_relaxed);
+    if (oldBothInEar == -1 || (oldBothInEar != 0) == newBothInEar) {
+        return; // state reverted or already applied before the deadline was reached
+    }
+
+    _lastBothInEar.store(newBothInEar ? 1 : 0, std::memory_order_relaxed);
+    LOG(Info,
+        "automatic_ear_detection: {} leftInEar={} rightInEar={} bothCase={}",
+        newBothInEar ? "PLAY" : "PAUSE", newState.pods.left.isInEar,
+        newState.pods.right.isInEar, newState.caseBox.isBothPodsInCase);
+    OnBothInEar(newBothInEar);
 }
 
 void Manager::OnLidOpened(bool opened)

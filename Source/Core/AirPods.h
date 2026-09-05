@@ -19,6 +19,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 
 #include "Bluetooth.h"
@@ -95,6 +96,14 @@ public:
 
     struct AdvState : AirPods::State {
         Side side;
+
+        // Raw per-advertisement in-ear bits (pre-gating): the broadcasting pod's
+        // own ear ("current") and the other pod's ear ("another"). See
+        // StateManager::UpdateState, which only trusts "another" once the pod
+        // that owns it has stopped broadcasting.
+        //
+        bool rawCurrInEar{false};
+        bool rawAnotInEar{false};
     };
 
     static bool IsDesiredAdv(const Bluetooth::AdvertisementWatcher::ReceivedData &data);
@@ -190,10 +199,22 @@ private:
     // -1: unknown (no advertisement processed yet), 0: not both in ear, 1: both in ear.
     std::atomic<int> _lastBothInEar{-1};
 
+    // Automatic ear detection edge debounce: the two pods take turns broadcasting
+    // and can briefly disagree about the in-ear bits while one is moved in or out,
+    // which would otherwise fire pause/resume back to back. A state change is only
+    // acted on once it has held stable for a short while. UpdateState only emits
+    // when the decoded state CHANGES, so the debounce is driven by a QTimer
+    // scheduled when the edge is first seen (see OnBothInEarDebounced), rather
+    // than by waiting for further state-change events.
+    //
+    static constexpr std::chrono::milliseconds BothInEarDebounce{800};
+    std::atomic<bool> _bothInEarDebounceActive{false};
+
     void OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, bool initial = false);
     void OnStateChanged(Details::StateManager::UpdateEvent updateEvent);
     void OnLidOpened(bool opened);
     void OnBothInEar(bool isBothInEar);
+    void OnBothInEarDebounced();
     bool OnAdvertisementReceived(const Bluetooth::AdvertisementWatcher::ReceivedData &data);
     void OnAdvWatcherStateChanged(
         Bluetooth::AdvertisementWatcher::State state, const std::optional<std::string> &optError);

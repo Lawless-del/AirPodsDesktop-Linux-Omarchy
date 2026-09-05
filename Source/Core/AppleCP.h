@@ -107,10 +107,11 @@ public:
     bool IsLeftBroadcasted() const;
     bool IsRightBroadcasted() const;
 
-    // True when this advertisement descends from a pod sitting in the case, in
-    // which case the "current"/"another" roles are reversed ("flipped"). See the
-    // decoder comments in AppleCP.cpp.
-    //
+// True when this advertisement was sent by a pod sitting in the case. Kept for
+// protocol documentation, but it is NOT part of the left/right resolution anymore:
+// captures from AirPods 4 always describe the broadcasting pod in `curr` regardless
+// of the case state (see the decoder comments in AppleCP.cpp).
+//
     bool IsFlipped() const;
     bool IsCurrUsedForLeft() const;
 
@@ -129,6 +130,14 @@ public:
 
     bool IsLeftInEar() const;
     bool IsRightInEar() const;
+
+    // Raw per-advertisement in-ear bits, before the case/charging gating:
+    // "current" is the broadcasting pod's own ear and "another" the other pod's
+    // ear. StateManager uses these to only trust a pod's report about the other
+    // pod once the latter has stopped broadcasting.
+    //
+    bool GetCurrInEar() const { return currInEar != 0; }
+    bool GetAnotInEar() const { return anotInEar != 0; }
 
     AirPods Desensitize() const;
 

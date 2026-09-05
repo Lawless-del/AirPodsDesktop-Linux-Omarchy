@@ -148,9 +148,8 @@ bool AirPods::IsLeftInEar() const
     if (bothInCase || IsLeftCharging()) {
         return false;
     }
-    // 'curr' normally belongs to the broadcasting pod and 'anot' to the other one;
-    // that assignment is reversed when the broadcasting pod sits in the case (the
-    // "flipped" bit). Gate both sides on the same test so they never disagree.
+    // 'curr' belongs to the broadcasting pod and 'anot' to the other one (see
+    // IsCurrUsedForLeft). Gate both sides on the same test so they never disagree.
     //
     return IsCurrUsedForLeft() ? currInEar : anotInEar;
 }
@@ -163,18 +162,27 @@ bool AirPods::IsRightInEar() const
     return IsCurrUsedForLeft() ? anotInEar : currInEar;
 }
 
-// 'curr' holds the values of the "current" pod and 'anot' of the "another" pod.
-// Normally the "current" pod is the one broadcasting, but when that pod is sitting
-// in the case (status bit 6, "flipped") the roles are reversed and 'curr' describes
-// the other (worn) pod. Left/right therefore must follow `broadcastFrom XOR flipped`,
-// otherwise the two pods swap values on screen every time the pod in the case takes
-// a turn at broadcasting (observed on AirPods 4 as a right pod flickering between
-// 30% and 40%). With the flip not set this reduces to the original mapping and is
-// unchanged for worn pods.
+// 'curr' holds the values of the broadcasting pod and 'anot' of the other one;
+// there is no left/right flip. Every captured advertisement from AirPods 4 (worn
+// and in the case) is consistent with `curr` = the broadcasting pod, so the left/
+// right mapping follows `broadcastFrom` alone.
+//
+// Verified from raw captures:
+//
+//   * Worn (both pods out of the case): only the right pod broadcasting carries
+//     curr=7/anot=10 -> exactly one pod at 70% and the left at 100%. Only the left
+//     pod broadcasting carries curr=10/anot=7, the same two levels. Decoding the
+//     advertisement from either pod gives left=100%, right=70%.
+//
+//   * In the case: the right pod broadcasts curr=3/anot=9 and the left pod
+//     curr=9/anot=3, i.e. left=90%, right=30% no matter which pod transmits. An
+//     earlier "flipped" accommodation (IsLeftBroadcasted() != IsFlipped()) instead
+//     swapped left and right for every other advertisement, making the two pods
+//     look as if their batteries traded values back and forth.
 //
 bool AirPods::IsCurrUsedForLeft() const
 {
-    return IsLeftBroadcasted() != IsFlipped();
+    return IsLeftBroadcasted();
 }
 
 bool AirPods::IsFlipped() const
