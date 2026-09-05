@@ -355,8 +355,15 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
 
     newState.pods.left.isInEar = [&]() {
         bool charging = newState.pods.left.isCharging;
-        bool inCase = newState.caseBox.isBothPodsInCase || false;
-        if (charging || inCase) {
+        if (charging) {
+            return false;
+        }
+        // Fallback: if both pods are charging, they're likely both in the case
+        // (even if fully charged and not actively charging, the firmware may report
+        // bothInCase). Only gate the side we're evaluating if the OTHER side is
+        // also charging, to avoid incorrectly pausing when only one pod is cased.
+        bool bothCharging = newState.pods.left.isCharging && newState.pods.right.isCharging;
+        if (bothCharging && newState.caseBox.isBothPodsInCase) {
             return false;
         }
         if (isTransmitting(cachedAdvState.left)) {
@@ -372,8 +379,11 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
 
     newState.pods.right.isInEar = [&]() {
         bool charging = newState.pods.right.isCharging;
-        bool inCase = newState.caseBox.isBothPodsInCase || false;
-        if (charging || inCase) {
+        if (charging) {
+            return false;
+        }
+        bool bothCharging = newState.pods.left.isCharging && newState.pods.right.isCharging;
+        if (bothCharging && newState.caseBox.isBothPodsInCase) {
             return false;
         }
         if (isTransmitting(cachedAdvState.right)) {
@@ -540,14 +550,6 @@ void Manager::OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, 
 
     if (doDisconnect) {
         _stateMgr.Disconnect();
-    }
-
-    // Pop up the main window when the bound device connects
-    // (but not for the initial state query while binding, otherwise the window would
-    // pop up on every app launch with already connected AirPods)
-    //
-    if (doConnect && !initial) {
-        ApdApp->GetMainWindow()->ShowSafely();
     }
 
     LOG(Info, "The device we bound is updated. current: {}, new: {}", _deviceConnected,
