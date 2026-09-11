@@ -226,7 +226,11 @@ MainWindow::MainWindow(QWidget *parent) : QDialog{parent}
     connect(this, &MainWindow::DisconnectSafely, this, &MainWindow::Disconnect);
     connect(this, &MainWindow::BindSafely, this, &MainWindow::Bind);
     connect(this, &MainWindow::UnbindSafely, this, &MainWindow::Unbind);
-    connect(this, &MainWindow::ShowSafely, this, &MainWindow::show);
+    connect(this, &MainWindow::ShowSafely, this, [this]() {
+        LOG(Debug, "MainWindow::ShowSafely - calling show()");
+        show();
+        LOG(Debug, "MainWindow::ShowSafely - show() completed, _isVisible=%d", _isVisible);
+    });
     connect(this, &MainWindow::HideSafely, this, &MainWindow::DoHide);
 #if defined APD_HAS_UPDATE
     connect(
@@ -246,6 +250,10 @@ MainWindow::MainWindow(QWidget *parent) : QDialog{parent}
     _ui.layoutCase->addWidget(_caseBattery);
     _ui.layoutClose->addWidget(_closeButton);
 
+    // DEBUG: Force initial visibility state to false
+    _isVisible = false;
+    LOG(Debug, "MainWindow constructor - initialized _isVisible=%d", _isVisible);
+
     Unavailable();
 
 #if defined APD_HAS_UPDATE
@@ -259,6 +267,12 @@ void MainWindow::UpdateState(const Core::AirPods::State &state)
 
     _status = Status::Updating;
     _cachedState = state;
+
+    // Auto-show window when AirPods first connect
+    if (!_isVisible) {
+        ShowSafely();
+    }
+
     Repaint();
     ApdApp->GetTrayIcon()->UpdateState(state);
 #if defined APD_HAS_TASKBAR_STATUS

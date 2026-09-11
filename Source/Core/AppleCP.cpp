@@ -18,6 +18,8 @@
 
 #include "AppleCP.h"
 
+#include <cstring>
+
 namespace Core::AppleCP {
 
 bool AirPods::IsValid(const std::vector<uint8_t> &data)
@@ -124,12 +126,6 @@ bool AirPods::IsBothPodsInCase() const
     return bothInCase;
 }
 
-bool AirPods::IsLidOpened() const
-{
-    return lidState == 1 || lidState == 2 || lidState == 3 || lidState == 4 || lidState == 5 ||
-           lidState == 6 || lidState == 7 || lidState == 0;
-}
-
 bool AirPods::IsCaseCharging() const
 {
     return battery.caseCharging;
@@ -200,5 +196,13 @@ AirPods AirPods::Desensitize() const
     std::memset(result.unk12, 0, sizeof(result.unk12));
 
     return result;
+}
+
+// Lid opened values are 0x0–0x7; closed values are 0x8–0xF.
+// Treating lidState as an unsigned 4-bit value, "opened" is simply < 8.
+//
+bool AirPods::IsLidOpened() const
+{
+    return static_cast<uint8_t>(lidState) < 8;
 }
 } // namespace Core::AppleCP

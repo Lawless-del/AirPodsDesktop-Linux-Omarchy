@@ -18,6 +18,7 @@
 
 #include "AirPods.h"
 
+#include <cstring>
 #include <mutex>
 #include <chrono>
 #include <thread>
@@ -315,28 +316,51 @@ auto StateManager::UpdateState() -> std::optional<UpdateEvent>
 #define PICK_SIDE(available_condition_with_field)                                                  \
     [&]() -> decltype(auto) {                                                                      \
         const Helper::Sides<bool> available = {                                                    \
-            .left = cachedAdvState.left.first.available_condition_with_field,                      \
-            .right = cachedAdvState.right.first.available_condition_with_field,                    \
+            .left  = cachedAdvState.left  && cachedAdvState.left->first  ? cachedAdvState.left->first.available_condition_with_field  : false, \
+            .right = cachedAdvState.right && cachedAdvState.right->first ? cachedAdvState.right->first.available_condition_with_field : false, \
         };                                                                                         \
         if (available.left && available.right) {                                                   \
-            return cachedAdvState.left.second > cachedAdvState.right.second                        \
-                       ? cachedAdvState.left.first                                                 \
-                       : cachedAdvState.right.first;                                               \
-        }                                                                                          \
-        else {                                                                                     \
-            return available.left ? cachedAdvState.left.first : cachedAdvState.right.first;        \
-        }                                                                                          \
+            const Advertisement::AdvState* lhs = cachedAdvState.left  && cachedAdvState.left->first  ? &cachedAdvState.left->first  : nullptr; \
+            const Advertisement::AdvState* rhs = cachedAdvState.right && cachedAdvState.right->first ? &cachedAdvState.right->first : nullptr; \
+            if (lhs && rhs) { \
+                return lhs->second > rhs->second ? lhs->first : rhs->first; \
+            } else if (lhs) { \
+                return lhs->first; \
+            } else if (rhs) { \
+                return rhs->first; \
+            } else { \
+                return Advertisement::AdvState{}; \
+            } \
+        } else { \
+            return available.left ? (cachedAdvState.left ? &cachedAdvState.left->first : nullptr) : \
+                   (cachedAdvState.right ? &cachedAdvState.right->first : nullptr); \
+        } \
     }()
 
-    newState.model = PICK_SIDE(model != Model::Unknown).model;
-    // A pod side is "available" if it carries battery, in-ear, or charging
-    // information -- AirPods 4 firmware may stop filling in the legacy battery
-    // nibbles (0xF) while the in-ear bits stay valid, so gating only on battery
-    // would freeze the ear-detection state.
-    //
-    newState.pods.left = std::move(PICK_SIDE(LeftHasInfo()).pods.left);
-    newState.pods.right = std::move(PICK_SIDE(RightHasInfo()).pods.right);
-    newState.caseBox = std::move(PICK_SIDE(caseBox.battery.Available()).caseBox);
+    // Guard against missing cached advertisement data (e.g., first advertisement
+    // for one side has not arrived yet). If a side is missing, fall back to
+    // a direct assignment rather than dereferencing a null optional.
+    if (!cachedAdvState.left || !cachedAdvState.right) {
+        if (cachedAdvState.left)  newState.model = cachedAdvState.left->first.model;
+        else if (cachedAdvState.right) newState.model = cachedAdvState.right->first.model;
+        else newState.model = Model::Unknown;
+
+        if (cachedAdvState.left)  newState.pods.left = std::move(cachedAdvState.left->pods.left);
+        if (cachedAdvState.right) newState.pods.right = std::move(cachedAdvState.right->pods.right);
+        if (cachedAdvState.right) {
+            newState.caseBox = std::move(cachedAdvState.right->caseBox);
+        }
+    } else {
+        newState.model = PICK_SIDE(model != Model::Unknown).model;
+        // A pod side is "available" if it carries battery, in-ear, or charging
+        // information -- AirPods 4 firmware may stop filling in the legacy battery
+        // nibbles (0xF) while the in-ear bits stay valid, so gating only on battery
+        // would freeze the ear-detection state.
+        //
+        newState.pods.left = std::move(PICK_SIDE(LeftHasInfo()).pods.left);
+        newState.pods.right = std::move(PICK_SIDE(RightHasInfo()).pods.right);
+        newState.caseBox = std::move(PICK_SIDE(caseBox.battery.Available()).caseBox);
+    }
 
     // In-ear resolution.
     //
