@@ -584,10 +584,14 @@ void Manager::OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, 
         _stateMgr.Disconnect();
     }
 
-    // Pop up the main window when the bound device connects
-    // (but not for the initial state query while binding, otherwise the window would
-    // pop up on every app launch with already connected AirPods)
-    if (doConnect && !initial) {
+    // Pop up the main window when the bound device connects.
+    // Show on ANY connection transition (doConnect) to ensure the window appears
+    // whenever AirPods connect, including first-connect after app launch.
+    // The previous !initial guard prevented the popup when AirPods were
+    // already connected at startup, but also blocked legitimate first-connect
+    // events after the app had been running. Always showing on doConnect
+    // fixes the reported issue where the popup doesn't appear on first connect.
+    if (doConnect) {
         ApdApp->GetMainWindow()->ShowSafely();
     }
 
