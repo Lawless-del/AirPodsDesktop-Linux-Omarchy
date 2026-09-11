@@ -584,6 +584,13 @@ void Manager::OnBoundDeviceConnectionStateChanged(Bluetooth::DeviceState state, 
         _stateMgr.Disconnect();
     }
 
+    // Pop up the main window when the bound device connects
+    // (but not for the initial state query while binding, otherwise the window would
+    // pop up on every app launch with already connected AirPods)
+    if (doConnect && !initial) {
+        ApdApp->GetMainWindow()->ShowSafely();
+    }
+
     LOG(Info, "The device we bound is updated. current: {}, new: {}", _deviceConnected,
         newDeviceConnected);
 }
